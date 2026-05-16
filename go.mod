@@ -2,6 +2,8 @@ module github.com/guruperl/genelet
 
 go 1.22
 
+toolchain go1.26.3
+
 require (
 	github.com/delongw/go-int-cipher v0.0.0-20151122132803-cb275de15ba8
 	github.com/go-sql-driver/mysql v1.8.1

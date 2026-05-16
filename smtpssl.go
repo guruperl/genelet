@@ -5,16 +5,16 @@ import (
 	"net"
 	"net/mail"
 	"net/smtp"
-	"strings"
 )
 
 type Smtpssl struct {
-	Username string
-	Password string
-	Address  string
-	Headers  map[string]string
-	From     string
-	To       []string
+	Username           string
+	Password           string
+	Address            string
+	Headers            map[string]string
+	From               string
+	To                 []string
+	InsecureSkipVerify bool
 }
 
 func (self *Smtpssl) Send(headers map[string]string, content string) error {
@@ -33,10 +33,17 @@ func (self *Smtpssl) Send(headers map[string]string, content string) error {
 		if headers["To"] == "" {
 			return Err(2062)
 		}
-		self.To = strings.Split(headers["To"], ",")
+		to, err := parseMailRecipients([]string{headers["To"]})
+		if err != nil {
+			return err
+		}
+		self.To = to
 	}
 	if headers["To"] == "" {
 		headers["To"] = self.To[0]
+	}
+	if err := validateMailHeaders(headers); err != nil {
+		return err
 	}
 
 	message := ""
@@ -49,7 +56,7 @@ func (self *Smtpssl) Send(headers map[string]string, content string) error {
 	auth := smtp.PlainAuth("", self.Username, self.Password, host)
 
 	tlsconfig := &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: self.InsecureSkipVerify,
 		ServerName:         host,
 	}
 	// Here is the key, you need to call tls.Dial instead of smtp.Dial

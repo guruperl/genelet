@@ -2,6 +2,7 @@ package genelet
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,9 +23,24 @@ func (self *Access) SetIP() string {
 	ip := ""
 	role := self.C.Roles[self.RoleValue]
 	if role.Length != 0 {
-		a := strings.Split(self.GetIP(), ".")
+		addr, err := netip.ParseAddr(self.GetIP())
+		if err != nil {
+			return ""
+		}
+		addr = addr.Unmap()
+		if !addr.Is4() {
+			return ""
+		}
+		a := addr.As4()
 		full := fmt.Sprintf("%02X%02X%02X%02X", a[0], a[1], a[2], a[3])
-		ip = full[0 : role.Length-1]
+		n := int(role.Length) - 1
+		if n < 0 {
+			n = 0
+		}
+		if n > len(full) {
+			n = len(full)
+		}
+		ip = full[:n]
 	}
 	return ip
 }

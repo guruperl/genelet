@@ -251,6 +251,32 @@ func TestHandleRequiresCSRFForMutatingMethods(t *testing.T) {
 	}
 }
 
+func TestHandleRejectsMissingCSRFBeforeAppHooks(t *testing.T) {
+	controller := securityController()
+	factoryCalled := false
+	filterFactoryCalled := false
+	controller.ModelFactories["thing"] = func() interface{} {
+		factoryCalled = true
+		return &securityModel{}
+	}
+	controller.FilterFactories["thing"] = func() interface{} {
+		filterFactoryCalled = true
+		return &securityFilter{}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/goto/admin/json/thing", nil)
+	req.Form = url.Values{}
+	req.Header.Set("X-Forwarded-User", "1")
+	base := Base{C: controller.C, W: httptest.NewRecorder(), R: req, RoleValue: "admin", ChartagValue: "json"}
+
+	err := controller.Handle("thing", base, http.MethodPost)
+	if gerr, ok := err.(Gerror); !ok || gerr.Code != http.StatusForbidden {
+		t.Fatalf("Handle missing CSRF = %#v, want 403 Gerror", err)
+	}
+	if factoryCalled || filterFactoryCalled {
+		t.Fatalf("app hooks/factories ran before CSRF rejection: model=%v filter=%v", factoryCalled, filterFactoryCalled)
+	}
+}
+
 type factoryRaceModel struct {
 	args url.Values
 }

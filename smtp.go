@@ -3,7 +3,6 @@ package genelet
 import (
 	"net"
 	"net/smtp"
-	"strings"
 )
 
 type Smtp struct {
@@ -31,10 +30,17 @@ func (self *Smtp) Send(headers map[string]string, content string) error {
 		if headers["To"] == "" {
 			return Err(2062)
 		}
-		self.To = strings.Split(headers["To"], ",")
+		to, err := parseMailRecipients([]string{headers["To"]})
+		if err != nil {
+			return err
+		}
+		self.To = to
 	}
 	if headers["To"] == "" {
 		headers["To"] = self.To[0]
+	}
+	if err := validateMailHeaders(headers); err != nil {
+		return err
 	}
 	message := ""
 	for k, v := range headers {

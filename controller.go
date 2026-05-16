@@ -482,15 +482,6 @@ func addJSON(c int8, msg string) string {
 func (self *Controller) Handle(obj string, base Base, method string) error {
 	self.ensureDefaults()
 	glog := self.Logger.Sugar()
-	model, ok := self.newModel(obj)
-	if !ok {
-		return Err(404)
-	}
-	filter, ok := self.newFilter(obj)
-	if !ok {
-		return Err(404)
-	}
-	storage := self.newStorage()
 	who := base.RoleValue
 	tag := base.ChartagValue
 
@@ -500,12 +491,6 @@ func (self *Controller) Handle(obj string, base Base, method string) error {
 
 	ARGS.Set("_gobj", obj)
 	ARGS.Set("_gtime", strconv.FormatInt(time.Now().Unix(), 10))
-
-	lists := make([]map[string]interface{}, 0)
-	other := make(map[string]interface{})
-	if err := InvokeVoid(model, "SetDefaults", ARGS, &lists, &other, storage); err != nil {
-		return err
-	}
 
 	action := ARGS.Get(c.ActionName)
 	if action == "" {
@@ -519,6 +504,25 @@ func (self *Controller) Handle(obj string, base Base, method string) error {
 	}
 	if r.Header.Get("X-Forwarded-ID") != "" {
 		ARGS.Set("_gid_url", r.Header.Get("X-Forwarded-ID"))
+	}
+	if isMutatingMethod(method) {
+		if err := base.ValidateCSRF(); err != nil {
+			return err
+		}
+	}
+	model, ok := self.newModel(obj)
+	if !ok {
+		return Err(404)
+	}
+	filter, ok := self.newFilter(obj)
+	if !ok {
+		return Err(404)
+	}
+	storage := self.newStorage()
+	lists := make([]map[string]interface{}, 0)
+	other := make(map[string]interface{})
+	if err := InvokeVoid(model, "SetDefaults", ARGS, &lists, &other, storage); err != nil {
+		return err
 	}
 	glog.Infof("action: %s", action)
 	if err := InvokeVoid(filter, "SetAll", base, action, obj, &other); err != nil {
@@ -602,11 +606,6 @@ func (self *Controller) Handle(obj string, base Base, method string) error {
 		}
 	}
 
-	if isMutatingMethod(method) {
-		if err := base.ValidateCSRF(); err != nil {
-			return err
-		}
-	}
 	glog.Infof("preset")
 	err = InvokeError(filter, "Preset")
 	if err != nil {

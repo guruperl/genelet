@@ -3,6 +3,7 @@ package genelet
 import (
 	"net/url"
 	"os"
+	"strconv"
 
 	"html/template"
 )
@@ -58,6 +59,12 @@ func (self *Config) Sendmail(lists []map[string]interface{}, ARGS url.Values, ot
 					smtp.Address = v
 				case "From":
 					smtp.From = v
+				case "InsecureSkipVerify", "TLSInsecureSkipVerify":
+					enabled, err := strconv.ParseBool(v)
+					if err != nil {
+						return err
+					}
+					smtp.InsecureSkipVerify = enabled
 				default:
 					headers[k] = v
 				}

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"regexp"
 	"testing"
 )
@@ -33,6 +34,29 @@ func TestProcedureRejectsEmptySQLName(t *testing.T) {
 	err = proc.Run_sql("", nil)
 	if gerr, ok := err.(Gerror); !ok || gerr.Code != 1175 {
 		t.Fatalf("Run_sql empty name = %#v, want 1175 Gerror", err)
+	}
+}
+
+func TestProcedureCallbackUsesConfiguredServerURL(t *testing.T) {
+	config := &Config{
+		ServerURL: "https://app.example.test/base",
+		Script:    "/goto",
+		GoURIName: "go_uri",
+		Roles:     map[string]Role{"m": {}},
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://evil.example.test/goto/m/json/google", nil)
+	proc := NewProcedure(Base{C: config, W: httptest.NewRecorder(), R: req, RoleValue: "m", ChartagValue: "json"}, nil, "/target?a=1", "google")
+
+	got := proc.Callback_address()
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Scheme != "https" || u.Host != "app.example.test" || u.Path != "/base/goto/m/json/google" {
+		t.Fatalf("callback = %s, want configured server origin/path", got)
+	}
+	if u.Query().Get("go_uri") != "/target?a=1" {
+		t.Fatalf("go_uri = %q, want original target", u.Query().Get("go_uri"))
 	}
 }
 

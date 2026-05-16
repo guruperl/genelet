@@ -124,3 +124,26 @@ func TestAccess(t *testing.T) {
 		t.Errorf("%s wanted", "okok")
 	}
 }
+
+func TestAccessSetIPWithIPv6DoesNotPanic(t *testing.T) {
+	configure := &Config{
+		Roles: map[string]Role{
+			"m": {
+				Length:     4,
+				Surface:    "mc",
+				Secret:     "member-local-secret",
+				Coding:     "member-local-coding",
+				Duration:   3600,
+				Attributes: []string{"email"},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "http://example.test", nil)
+	req.RemoteAddr = "[2001:db8::1]:12345"
+	access := NewAccess(Base{C: configure, W: httptest.NewRecorder(), R: req, RoleValue: "m", ChartagValue: "json"})
+
+	sig := access.Signature("user@example.test")
+	if err := access.VerifyCookie(sig); err != nil {
+		t.Fatalf("VerifyCookie with IPv6-bound role returned error: %v", err)
+	}
+}

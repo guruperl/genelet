@@ -88,11 +88,31 @@ func (self *Procedure) Authenticate_as(login string) error {
 }
 
 func (self *Procedure) Callback_address() string {
-	http := "http"
-	if self.R.TLS != nil {
-		http += "s"
+	scheme := "http"
+	host := ""
+	pathPrefix := ""
+	if self.C != nil && self.C.ServerURL != "" {
+		if server, err := url.Parse(self.C.ServerURL); err == nil && server.Scheme != "" && server.Host != "" {
+			scheme = server.Scheme
+			host = server.Host
+			pathPrefix = strings.TrimRight(server.Path, "/")
+		}
 	}
-	return http + "://" + self.R.Host + self.C.Script + "/" + self.RoleValue + "/" + self.ChartagValue + "/" + self.Provider + "?" + self.C.GoURIName + "=" + url.QueryEscape(self.Uri)
+	if host == "" && self.R != nil {
+		if self.R.TLS != nil {
+			scheme = "https"
+		}
+		host = self.R.Host
+	}
+	callback := &url.URL{
+		Scheme: scheme,
+		Host:   host,
+		Path:   pathPrefix + self.C.Script + "/" + self.RoleValue + "/" + self.ChartagValue + "/" + self.Provider,
+	}
+	q := callback.Query()
+	q.Set(self.C.GoURIName, self.Uri)
+	callback.RawQuery = q.Encode()
+	return callback.String()
 }
 
 func (self *Procedure) Fill_provider(back map[string]interface{}) error {
