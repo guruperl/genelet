@@ -2,6 +2,7 @@
 package genelet
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -114,15 +115,33 @@ func NewConfig(filename string) (*Config, error) {
 	}
 
 	if parsed.ConnectArray == nil {
-		if os.Getenv("DBUSER") != "" && os.Getenv("DBPASS") != "" && os.Getenv("DBNAME") != "" {
-			host := "localhost:3306"
-			if x := os.Getenv("DBHOST"); x != "" {
-				host = x
-				if !strings.Contains(host, ":") {
-					host += ":3306"
-				}
+		driver := NormalizeDriver(os.Getenv("DBTYPE"))
+		if driver == "" {
+			driver = "mysql"
+		}
+		if driver == "sqlite3" {
+			if os.Getenv("DBNAME") != "" {
+				parsed.ConnectArray = []string{driver, os.Getenv("DBNAME")}
+			} else {
+				return nil, fmt.Errorf("ConnectArray is not set")
 			}
-			parsed.ConnectArray = []string{"mysql", os.Getenv("DBUSER") + ":" + os.Getenv("DBPASS") + "@tcp(" + host + ")/" + os.Getenv("DBNAME")}
+		} else if os.Getenv("DBUSER") != "" && os.Getenv("DBPASS") != "" && os.Getenv("DBNAME") != "" {
+			if driver == "postgres" {
+				host := "localhost"
+				if x := os.Getenv("DBHOST"); x != "" {
+					host = x
+				}
+				parsed.ConnectArray = []string{driver, "postgres://" + os.Getenv("DBUSER") + ":" + os.Getenv("DBPASS") + "@" + host + "/" + os.Getenv("DBNAME") + "?sslmode=disable"}
+			} else {
+				host := "localhost:3306"
+				if x := os.Getenv("DBHOST"); x != "" {
+					host = x
+					if !strings.Contains(host, ":") {
+						host += ":3306"
+					}
+				}
+				parsed.ConnectArray = []string{driver, os.Getenv("DBUSER") + ":" + os.Getenv("DBPASS") + "@tcp(" + host + ")/" + os.Getenv("DBNAME")}
+			}
 		} else {
 			return nil, fmt.Errorf("ConnectArray is not set")
 		}
@@ -198,4 +217,18 @@ func NewConfig(filename string) (*Config, error) {
 	//}
 
 	return parsed, nil
+}
+
+func (c *Config) DriverName() string {
+	if c == nil || len(c.ConnectArray) == 0 {
+		return ""
+	}
+	return NormalizeDriver(c.ConnectArray[0])
+}
+
+func (c *Config) OpenDB() (*sql.DB, error) {
+	if c == nil || len(c.ConnectArray) < 2 {
+		return nil, fmt.Errorf("ConnectArray must include driver and data source")
+	}
+	return sql.Open(c.DriverName(), c.ConnectArray[1])
 }

@@ -46,6 +46,16 @@ func InvokeVoid(any interface{}, name string, args ...interface{}) error {
 	return nil
 }
 
+func InvokeOptionalVoid(any interface{}, name string, args ...interface{}) error {
+	if any == nil {
+		return nil
+	}
+	if !reflect.ValueOf(any).MethodByName(name).IsValid() {
+		return nil
+	}
+	return InvokeVoid(any, name, args...)
+}
+
 func InvokeError(any interface{}, name string, args ...interface{}) error {
 	out, err := TryInvoke(any, name, args...)
 	if err != nil {

@@ -16,13 +16,13 @@ import (
 	"time"
 
 	int_cipher "github.com/delongw/go-int-cipher"
-	_ "github.com/go-sql-driver/mysql"
 	"go.uber.org/zap"
 )
 
 type Controller struct {
 	C                *Config
 	DB               *sql.DB
+	DBDriver         string
 	Models           map[string]interface{}
 	Filters          map[string]interface{}
 	Storage          map[string]interface{}
@@ -36,6 +36,7 @@ func NewController(config *Config, db *sql.DB, logger ...*zap.Logger) *Controlle
 	c := &Controller{
 		C:                config,
 		DB:               db,
+		DBDriver:         config.DriverName(),
 		Storage:          map[string]interface{}{},
 		ModelFactories:   map[string]func() interface{}{},
 		FilterFactories:  map[string]func() interface{}{},
@@ -52,6 +53,16 @@ func (self *Controller) ensureDefaults() {
 	if self.Logger == nil {
 		self.Logger = zap.NewNop()
 	}
+}
+
+func (self *Controller) dbDriver() string {
+	if self.DBDriver != "" {
+		return self.DBDriver
+	}
+	if self.C != nil {
+		return self.C.DriverName()
+	}
+	return ""
 }
 
 func (self *Controller) staticPage(w http.ResponseWriter, r *http.Request) {
@@ -615,6 +626,9 @@ func (self *Controller) Handle(obj string, base Base, method string) error {
 	options, ok := actionHash["options"]
 	if !ok || !Grep(options, "no_db") {
 		if err := InvokeVoid(model, "SetDB", self.DB); err != nil {
+			return err
+		}
+		if err := InvokeOptionalVoid(model, "SetDriver", self.dbDriver()); err != nil {
 			return err
 		}
 	}

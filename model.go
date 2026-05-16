@@ -68,6 +68,7 @@ func (self *Model) Initialize(comp *Component, logger ...*zap.Logger) {
 	self.CurrentKey = comp.CurrentKey
 	self.CurrentKeys = comp.CurrentKeys
 	self.CurrentIDAuto = comp.CurrentIDAuto
+	self.LastIDColumn = comp.CurrentIDAuto
 	self.KeyIN = comp.KeyIN
 
 	self.InsertPars = comp.InsertPars
@@ -82,6 +83,10 @@ func (self *Model) Initialize(comp *Component, logger ...*zap.Logger) {
 
 func (self *Model) SetDB(db *sql.DB) {
 	self.DB = db
+}
+
+func (self *Model) SetDriver(driver string) {
+	self.Crud.SetDriver(driver)
 }
 
 func (self *Model) SetDefaults(args url.Values, lists *[]map[string]interface{}, other *map[string]interface{}, storage map[string]interface{}) {
@@ -510,6 +515,9 @@ func (self *Model) another_object(page map[string]interface{}, args url.Values, 
 		return nil, "", "", err
 	}
 	if err := InvokeVoid(p, "SetDB", self.DB); err != nil {
+		return nil, "", "", err
+	}
+	if err := InvokeOptionalVoid(p, "SetDriver", self.Driver); err != nil {
 		return nil, "", "", err
 	}
 

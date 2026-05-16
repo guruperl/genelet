@@ -19,6 +19,7 @@ type Crud struct {
 	DBI
 	CurrentTable  string  `json:"current_table"`
 	CurrentTables []Table `json:"current_tables"`
+	LastIDColumn  string
 }
 
 func NewCrud(db *sql.DB, table string, tables []Table) *Crud {
@@ -254,7 +255,7 @@ func (self *Crud) insertHash_(how string, fieldValues url.Values) error {
 		values = append(values, v[0])
 	}
 	sql := how + " INTO " + self.CurrentTable + " (" + strings.Join(fields, ", ") + ") VALUES (" + strings.Join(strings.Split(strings.Repeat("?", len(fields)), ""), ",") + ")"
-	return self.DoSQL(sql, values...)
+	return self.DoSQLReturning(sql, self.LastIDColumn, values...)
 }
 
 func (self *Crud) UpdateHash(fieldValues url.Values, keyname interface{}, ids []interface{}, extra ...url.Values) error {
