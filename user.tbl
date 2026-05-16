@@ -1,0 +1,12 @@
+drop table if exists user;
+create table user (
+m_id	int auto_increment not null,
+email		varchar(255),
+passwd		varchar(255),
+first_name	varchar(255),
+last_name	varchar(255),
+address	varchar(255),
+company	varchar(255),
+primary key (m_id)
+);
+insert into user (email, passwd, first_name, last_name, address, company) values ("a","b","c","d","e","f");
