@@ -2,6 +2,7 @@ package genelet
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"html/template"
@@ -19,8 +20,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const maxUploadBytes = 32 << 20
-
 type Controller struct {
 	C                *Config
 	DB               *sql.DB
@@ -31,6 +30,28 @@ type Controller struct {
 	FilterFactories  map[string]func() interface{}
 	StorageFactories map[string]func() interface{}
 	Logger           *zap.Logger
+}
+
+func NewController(config *Config, db *sql.DB, logger ...*zap.Logger) *Controller {
+	c := &Controller{
+		C:                config,
+		DB:               db,
+		Storage:          map[string]interface{}{},
+		ModelFactories:   map[string]func() interface{}{},
+		FilterFactories:  map[string]func() interface{}{},
+		StorageFactories: map[string]func() interface{}{},
+	}
+	if len(logger) > 0 {
+		c.Logger = logger[0]
+	}
+	c.ensureDefaults()
+	return c
+}
+
+func (self *Controller) ensureDefaults() {
+	if self.Logger == nil {
+		self.Logger = zap.NewNop()
+	}
 }
 
 func (self *Controller) staticPage(w http.ResponseWriter, r *http.Request) {
@@ -80,8 +101,21 @@ func (self *Controller) corsAllowed(origin string) bool {
 }
 
 func (self *Controller) loginPage(base *Base) {
+	self.ensureDefaults()
 	c := self.C
 	uri := base.R.Form.Get(c.GoURIName)
+	if uri == "" {
+		if found, err := base.R.Cookie(c.GoProbeName); err == nil {
+			uri = found.Value
+		}
+	}
+	safeURI, err := c.ValidateLocalRedirect(uri)
+	if err != nil {
+		base.SendStatusPage(http.StatusBadRequest, "Bad Request")
+		return
+	}
+	uri = safeURI
+	base.R.Form.Set(c.GoURIName, uri)
 	glog := self.Logger.Sugar()
 
 	provider := base.R.Form.Get(c.ProviderName)
@@ -96,7 +130,7 @@ func (self *Controller) loginPage(base *Base) {
 
 	db := self.DB
 
-	var err error
+	err = nil
 	if Grep(c.Oauth2s, provider) {
 		ticket := NewOauth2(*base, db, uri, provider)
 		glog.Infof("%s %s", "oauth2 uses: ", provider)
@@ -153,6 +187,7 @@ func (self *Controller) loginPage(base *Base) {
 }
 
 func (self *Controller) checkForm(r *http.Request, dir string) error {
+	self.ensureDefaults()
 	glog := self.Logger.Sugar()
 	reader, err := r.MultipartReader()
 	if reader != nil && err != nil {
@@ -222,11 +257,12 @@ func (self *Controller) checkForm(r *http.Request, dir string) error {
 			fileName := part.FileName()
 			if fileName == "" {
 				var b bytes.Buffer
-				if _, err := io.Copy(&b, io.LimitReader(part, maxUploadBytes+1)); err != nil {
+				limit := self.C.uploadLimit()
+				if _, err := io.Copy(&b, io.LimitReader(part, limit+1)); err != nil {
 					part.Close()
 					return err
 				}
-				if b.Len() > maxUploadBytes {
+				if int64(b.Len()) > limit {
 					part.Close()
 					return Err(1010, "multipart field too large")
 				}
@@ -245,11 +281,12 @@ func (self *Controller) checkForm(r *http.Request, dir string) error {
 					return err
 				}
 				defer dst.Close()
-				written, err := io.Copy(dst, io.LimitReader(part, maxUploadBytes+1))
+				limit := self.C.uploadLimit()
+				written, err := io.Copy(dst, io.LimitReader(part, limit+1))
 				if err != nil {
 					return err
 				}
-				if written > maxUploadBytes {
+				if written > limit {
 					_ = os.Remove(fullname)
 					return Err(1010, "upload file too large")
 				}
@@ -263,8 +300,19 @@ func (self *Controller) checkForm(r *http.Request, dir string) error {
 }
 
 func (self *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	self.ensureDefaults()
+	if self.C == nil {
+		http.Error(w, "Genelet config is not set", http.StatusInternalServerError)
+		return
+	}
+	scrubGeneletForwardedHeaders(r.Header)
 	glog := self.Logger.Sugar()
 	c := self.C
+	if timeout := c.requestTimeout(); timeout > 0 {
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+		r = r.WithContext(ctx)
+	}
 	length := len(c.Script)
 
 	if origin := r.Header.Get("Origin"); origin != "" {
@@ -309,7 +357,7 @@ func (self *Controller) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	pathInfo := strings.Split(r.URL.Path[length+1:], "/")
 	if len(pathInfo) == 4 {
-		r.Header.Add("X-Forwarded-ID", pathInfo[3])
+		r.Header.Set("X-Forwarded-ID", pathInfo[3])
 	} else if len(pathInfo) != 3 {
 		glog.Infof("not genelet url")
 		http.Error(w, "Bad Request", 400)
@@ -421,6 +469,7 @@ func addJSON(c int8, msg string) string {
 }
 
 func (self *Controller) Handle(obj string, base Base, method string) error {
+	self.ensureDefaults()
 	glog := self.Logger.Sugar()
 	model, ok := self.newModel(obj)
 	if !ok {
@@ -453,6 +502,9 @@ func (self *Controller) Handle(obj string, base Base, method string) error {
 		if method == "GET" && r.Header.Get("X-Forwarded-ID") != "" {
 			action = c.DefaultActions["GET_item"]
 		}
+	}
+	if actionRequiresPost(action) && method != http.MethodPost && method != http.MethodDelete {
+		return Err(http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed))
 	}
 	if r.Header.Get("X-Forwarded-ID") != "" {
 		ARGS.Set("_gid_url", r.Header.Get("X-Forwarded-ID"))
@@ -539,6 +591,11 @@ func (self *Controller) Handle(obj string, base Base, method string) error {
 		}
 	}
 
+	if isMutatingMethod(method) {
+		if err := base.ValidateCSRF(); err != nil {
+			return err
+		}
+	}
 	glog.Infof("preset")
 	err = InvokeError(filter, "Preset")
 	if err != nil {

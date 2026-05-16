@@ -62,8 +62,18 @@ func get_body(method string, uri string, hash map[string]string, items []string,
 	back := make(map[string]interface{})
 	a := strings.Split(string(body), "&")
 	for _, v := range a {
-		b := strings.Split(v, "=")
-		back[b[0]] = b[1]
+		if v == "" {
+			continue
+		}
+		b := strings.SplitN(v, "=", 2)
+		if len(b) != 2 {
+			return nil, Err(1400, "invalid oauth1 response")
+		}
+		value, err := url.QueryUnescape(b[1])
+		if err != nil {
+			return nil, err
+		}
+		back[b[0]] = value
 	}
 
 	return back, nil

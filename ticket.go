@@ -2,6 +2,7 @@ package genelet
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -39,6 +40,9 @@ func (self *Ticket) Handler() error {
 	if self.Uri == "" {
 		self.Uri = found.Value
 	}
+	if self.Uri, err = self.validatedRedirect(self.Uri); err != nil {
+		return err
+	}
 
 	if ARGS.Get(self.C.GoErrName) != "" {
 		code, _ := strconv.Atoi(ARGS.Get(self.C.GoErrName))
@@ -52,6 +56,10 @@ func (self *Ticket) Handler_login() error {
 	ARGS := self.R.Form
 	role := self.C.Roles[self.RoleValue]
 	issuer := role.Issuers[self.Provider]
+	var err error
+	if self.Uri, err = self.validatedRedirect(self.Uri); err != nil {
+		return err
+	}
 
 	if passin := ARGS.Get(role.Surface); passin != "" {
 		if role.Surface == issuer.Credential[3] {
@@ -67,11 +75,33 @@ func (self *Ticket) Handler_login() error {
 
 	login := ARGS.Get(issuer.Credential[0])
 	password := ARGS.Get(issuer.Credential[1])
+	if login != "" && !loginThrottleAllowed(&self.Base, self.Provider, login) {
+		return Err(http.StatusTooManyRequests, http.StatusText(http.StatusTooManyRequests))
+	}
 	if err := self.CGI.Authenticate(login, password); err != nil {
+		if login != "" {
+			if throttleErr := loginThrottleFailure(&self.Base, self.Provider, login); throttleErr != nil {
+				return throttleErr
+			}
+		}
 		return err
+	}
+	if login != "" {
+		loginThrottleSuccess(&self.Base, self.Provider, login)
 	}
 
 	return self.HandlerFields()
+}
+
+func (self *Ticket) validatedRedirect(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	safe, err := self.C.ValidateLocalRedirect(raw)
+	if err != nil {
+		return "", Err(http.StatusBadRequest, "invalid redirect")
+	}
+	return safe, nil
 }
 
 func (self *Ticket) GetAttributes() []string {
@@ -101,6 +131,10 @@ func (self *Ticket) HandlerFields() error {
 	}
 
 	final_uri := self.Uri
+	var err error
+	if final_uri, err = self.validatedRedirect(final_uri); err != nil {
+		return err
+	}
 
 	// how, variable name, value, base uri, others wholse values in redirect
 	// how: (t, u, p)+(A, B, C)+(0,1)+(0,1), t:out_hash, u:go_uri, p:provider

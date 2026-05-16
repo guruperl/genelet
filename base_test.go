@@ -33,7 +33,7 @@ func TestBase(t *testing.T) {
 	b := newBase(configure, "", "", w, req)
 	b.SetCookie("c", "v", 100)
 	h := w.Header()
-	matched, err := regexp.MatchString("^c=v; Path=/; Domain=example.com; Expires=", h.Get("Set-Cookie"))
+	matched, err := regexp.MatchString("^c=v; Path=/; Expires=.*; HttpOnly; SameSite=Lax$", h.Get("Set-Cookie"))
 	if err != nil || !matched {
 		t.Errorf("%s gotten", h.Get("Set-Cookie"))
 	}
@@ -47,7 +47,7 @@ func TestBase(t *testing.T) {
 	b.SetCookieExpire("c")
 	b.SendPage("okokok")
 	h = w.Header()
-	matched, err = regexp.MatchString("^c=0; Path=/; Domain=example.com; Expires=", h.Get("Set-Cookie"))
+	matched, err = regexp.MatchString("^c=0; Path=/; Expires=.*; Max-Age=0; HttpOnly; SameSite=Lax$", h.Get("Set-Cookie"))
 	if err != nil || !matched {
 		t.Errorf("%s gotten", h.Get("Set-Cookie"))
 	}

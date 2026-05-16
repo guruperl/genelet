@@ -32,10 +32,16 @@ func (self *Base) Fulfill() error {
 	}
 
 	length := len(self.C.Script)
+	if len(newURL.Path) <= length {
+		return Err(404, "Redirected URL not found")
+	}
 	u1 := newURL.Path[:length]
 	u2 := newURL.Path[length+1:]
 	if u1 == self.C.Script && len(u2) > 0 {
 		pathInfo := strings.Split(u2, "/")
+		if len(pathInfo) < 2 {
+			return Err(404, "Redirected URL not found")
+		}
 		self.RoleValue = pathInfo[0]
 		self.ChartagValue = pathInfo[1]
 	}
@@ -115,8 +121,8 @@ func (self *Base) GetIP() string {
 //}
 
 func (self *Base) SetCookie(name string, value string, maxAge ...int) {
-	domain := self.R.Host
 	path := "/"
+	domain := ""
 	role, ok := self.C.Roles[self.RoleValue]
 	if ok && role.Domain != "" {
 		domain = role.Domain
@@ -125,12 +131,19 @@ func (self *Base) SetCookie(name string, value string, maxAge ...int) {
 		path = role.Path
 	}
 
-	var cookie http.Cookie
+	cookie := http.Cookie{
+		Name:     name,
+		Value:    value,
+		Domain:   domain,
+		Path:     path,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   self.secureCookie(),
+	}
 	if maxAge != nil {
 		expiration := time.Now().Add(time.Duration(maxAge[0]) * time.Second)
-		cookie = http.Cookie{Name: name, Value: value, Domain: domain, Path: path, MaxAge: maxAge[0], Expires: expiration}
-	} else {
-		cookie = http.Cookie{Name: name, Value: value, Domain: domain, Path: path}
+		cookie.MaxAge = maxAge[0]
+		cookie.Expires = expiration
 	}
 	http.SetCookie(self.W, &cookie)
 }

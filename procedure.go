@@ -25,6 +25,9 @@ func NewProcedure(base Base, db *sql.DB, uri string, provider string) *Procedure
 }
 
 func (self *Procedure) Run_sql(call_name string, in_vals []interface{}) error {
+	if call_name == "" {
+		return Err(1175)
+	}
 	role := self.C.Roles[self.RoleValue]
 	issuer := role.Issuers[self.Provider]
 	if (issuer.Screen & 1) != 0 {
@@ -43,7 +46,7 @@ func (self *Procedure) Run_sql(call_name string, in_vals []interface{}) error {
 	self.Out_hash = make(map[string]interface{})
 	var err error
 	dbi := &DBI{DB: self.DB}
-	if strings.ToLower(call_name[0:7]) == "select " {
+	if strings.HasPrefix(strings.ToLower(call_name), "select ") {
 		err = dbi.GetSQLLabel(self.Out_hash, call_name, outPars, in_vals...)
 	} else {
 		err = dbi.DoProc(self.Out_hash, outPars, call_name, in_vals...)

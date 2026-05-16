@@ -116,13 +116,13 @@ func (self *Access) VerifyCookie(raw string) error {
 		return err
 	}
 
-	self.R.Header.Add("X-Forwarded-Time", when)
-	self.R.Header.Add("X-Forwarded-User", login)
-	self.R.Header.Add("X-Forwarded-Group", group)
-	self.R.Header.Add("X-Forwarded-Raw", raw)
-	self.R.Header.Add("X-Forwarded-Hash", hash)
+	self.R.Header.Set("X-Forwarded-Time", when)
+	self.R.Header.Set("X-Forwarded-User", login)
+	self.R.Header.Set("X-Forwarded-Group", group)
+	self.R.Header.Set("X-Forwarded-Raw", raw)
+	self.R.Header.Set("X-Forwarded-Hash", hash)
 	role := self.C.Roles[self.RoleValue]
-	self.R.Header.Add("X-Forwarded-Duration", strconv.Itoa(role.Duration))
+	self.R.Header.Set("X-Forwarded-Duration", strconv.Itoa(role.Duration))
 	//	self.R.Header.Add("X-Forwarded-Request_Time", strconv.Itoa(self.CGI.SetWhen()))
 
 	return nil

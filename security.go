@@ -186,9 +186,9 @@ func isMutatingMethod(method string) bool {
 
 func actionRequiresPost(action string) bool {
 	switch action {
-	case "delete", "login_as", "upload", "approve", "deleteBidder", "deleteTarget":
+	case "insert", "update", "insupd", "replace", "delete", "login_as", "upload", "approve", "deleteBidder", "deleteTarget":
 		return true
 	default:
-		return strings.HasPrefix(action, "delete")
+		return strings.HasPrefix(action, "delete") || strings.HasPrefix(action, "update")
 	}
 }

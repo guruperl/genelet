@@ -2,7 +2,7 @@
 
 Genelet Go is a small but self-contained Go web framework for JSON-described CRUD-style web applications. A Genelet app keeps its runtime contract in `conf/config.json` and per-component `component.json` files, then supplies generated or hand-written `Filter` and `Model` structs for each component.
 
-The framework includes request routing, database-backed CRUD helpers, template rendering, cookies, signed auth/session behavior, issuer-based login flows, OAuth1/OAuth2 helpers, CSRF-oriented request checks, email helpers, and stable numeric framework errors. It is intended to support generated applications without requiring a larger Go web framework.
+The framework includes request routing, MySQL-backed CRUD helpers, template rendering, hardened cookies, signed auth/session behavior, issuer-based login flows, OAuth1/OAuth2 helpers, CSRF checks for mutating requests, email helpers, and stable numeric framework errors. It is intended to support generated applications without requiring a larger Go web framework.
 
 ## How It Works
 
@@ -13,7 +13,7 @@ Requests are routed by path:
 <Script>/<role>/<tag>/<component>/<id>
 ```
 
-`config.json` defines the script path, roles, chartags, authentication providers, templates, document root, upload settings, and database connection settings. Each component's `component.json` defines tables, keys, available actions, validation, aliases, groups, fields, foreign-key helpers, and optional next-page model calls.
+`config.json` defines the script path, roles, chartags, authentication providers, templates, document root, upload settings, and MySQL connection settings. Each component's `component.json` defines tables, keys, available actions, validation, aliases, groups, fields, foreign-key helpers, and optional next-page model calls.
 
 For a component named `question`, the application registers factories that return request-local model and filter values:
 
@@ -74,6 +74,8 @@ Generated apps can use `no_db` for actions that do not need database work and `n
 ```text
 <Template>/<role>/<component>/<action>.<tag>
 ```
+
+Database support is currently MySQL-oriented. The runtime imports the MySQL driver, `ConnectArray` defaults use MySQL DSNs, and stored procedure helpers emit MySQL `CALL` syntax.
 
 ## Compatibility Notes
 

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -92,6 +93,161 @@ func TestControllerCORS(t *testing.T) {
 				t.Fatalf("Access-Control-Allow-Credentials = %q, want %q", got, tt.wantCreds)
 			}
 		})
+	}
+}
+
+type securityModel struct{}
+
+func (m *securityModel) SetDefaults(url.Values, *[]map[string]interface{}, *map[string]interface{}, map[string]interface{}) {
+}
+
+func (m *securityModel) SetDB(any interface{}) {}
+
+type securityFilter struct {
+	action string
+}
+
+func (f *securityFilter) SetAll(_ Base, action string, _ string, _ *map[string]interface{}) {
+	f.action = action
+}
+
+func (f *securityFilter) GetAll() (map[string][]string, []string) {
+	return map[string][]string{
+		"groups":  {"adv", "admin"},
+		"options": {"no_db", "no_method"},
+	}, nil
+}
+
+func (f *securityFilter) Preset() error { return nil }
+
+func (f *securityFilter) Before(model *securityModel, extra url.Values, nextextra url.Values) error {
+	return nil
+}
+
+func (f *securityFilter) After(model *securityModel) error { return nil }
+
+func securityController() *Controller {
+	return NewController(&Config{
+		ActionName: "action",
+		DefaultActions: map[string]string{
+			http.MethodGet:    "topics",
+			http.MethodPost:   "insert",
+			http.MethodDelete: "delete",
+		},
+		Script:      "/goto",
+		GoProbeName: "go_probe",
+		CSRFName:    "go_csrf",
+		Secret:      "app-secret",
+		Blks:        map[string]map[string]string{},
+		Chartags:    map[string]Chartag{"json": {Case: 1, ContentType: "application/json"}},
+		Roles: map[string]Role{
+			"adv": {
+				Id_name:    "adv_id",
+				Attributes: []string{"adv_id", "agency_id", "team_id"},
+				Surface:    "mc",
+				Secret:     "role-secret",
+				Coding:     "role-coding",
+				Duration:   3600,
+				MaxAge:     3600,
+			},
+			"admin": {
+				Is_admin:   true,
+				Id_name:    "admin_id",
+				Attributes: []string{"admin_id"},
+				Surface:    "ac",
+				Secret:     "admin-secret",
+				Coding:     "admin-coding",
+				Duration:   3600,
+			},
+		},
+	}, nil, zap.NewNop())
+}
+
+func TestControllerScrubsUntrustedForwardedHeaders(t *testing.T) {
+	controller := securityController()
+	req := httptest.NewRequest(http.MethodGet, "/goto/adv/json/thing", nil)
+	req.Header.Set("X-Forwarded-User", "999")
+	req.Header.Set("X-Forwarded-Group", "evil|evil")
+	req.Header.Set("X-Forwarded-Time", "999")
+	req.Header.Set("X-Forwarded-Duration", "999")
+	signer := NewAccess(Base{C: controller.C, W: httptest.NewRecorder(), R: req, RoleValue: "adv", ChartagValue: "json"})
+	req.AddCookie(&http.Cookie{Name: "mc", Value: signer.Signature("1", "10", "20")})
+	controller.ModelFactories["thing"] = func() interface{} { return &securityModel{} }
+	controller.FilterFactories["thing"] = func() interface{} { return &securityFilter{} }
+
+	w := httptest.NewRecorder()
+	controller.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "999") || strings.Contains(body, "evil") {
+		t.Fatalf("response used spoofed forwarded headers: %s", body)
+	}
+	if !strings.Contains(body, `"adv_id":["1"]`) || !strings.Contains(body, `"agency_id":["10"]`) || !strings.Contains(body, `"team_id":["20"]`) {
+		t.Fatalf("response missing verified cookie identity: %s", body)
+	}
+}
+
+func TestLoginPageRejectsExternalGoURI(t *testing.T) {
+	controller := securityController()
+	controller.C.GoURIName = "go_uri"
+	controller.C.ProviderName = "provider"
+	controller.C.LoginName = "login"
+	controller.C.Roles["adv"] = Role{
+		Attributes: []string{"adv_id"},
+		Surface:    "mc",
+		Secret:     "role-secret",
+		Coding:     "role-coding",
+		Issuers: map[string]Issuer{"db": {
+			Default:      true,
+			Credential:   []string{"login", "password", "direct", "mc"},
+			ProviderPars: map[string]string{"Def_login": "u", "Def_password": "p"},
+		}},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/goto/adv/json/login?go_uri=https://evil.example.test/", nil)
+	if err := req.ParseForm(); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	controller.loginPage(&Base{C: controller.C, W: w, R: req, RoleValue: "adv", ChartagValue: "json"})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandleRequiresCSRFForMutatingMethods(t *testing.T) {
+	controller := securityController()
+	controller.ModelFactories["thing"] = func() interface{} { return &securityModel{} }
+	controller.FilterFactories["thing"] = func() interface{} { return &securityFilter{} }
+	getReq := httptest.NewRequest(http.MethodGet, "/goto/admin/json/thing?action=insert", nil)
+	getReq.Form = url.Values{"action": {"insert"}}
+	getReq.Header.Set("X-Forwarded-User", "1")
+	getBase := Base{C: controller.C, W: httptest.NewRecorder(), R: getReq, RoleValue: "admin", ChartagValue: "json"}
+	err := controller.Handle("thing", getBase, http.MethodGet)
+	if gerr, ok := err.(Gerror); !ok || gerr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET insert = %#v, want 405 Gerror", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/goto/admin/json/thing", nil)
+	req.Form = url.Values{}
+	req.Header.Set("X-Forwarded-User", "1")
+	base := Base{C: controller.C, W: httptest.NewRecorder(), R: req, RoleValue: "admin", ChartagValue: "json"}
+
+	err = controller.Handle("thing", base, http.MethodPost)
+	if gerr, ok := err.(Gerror); !ok || gerr.Code != http.StatusForbidden {
+		t.Fatalf("Handle missing CSRF = %#v, want 403 Gerror", err)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/goto/admin/json/thing", nil)
+	req.Form = url.Values{}
+	req.Header.Set("X-Forwarded-User", "1")
+	base = Base{C: controller.C, W: httptest.NewRecorder(), R: req, RoleValue: "admin", ChartagValue: "json"}
+	req.Header.Set("X-CSRF-Token", base.CSRFToken())
+	if err := controller.Handle("thing", base, http.MethodPost); err != nil {
+		t.Fatalf("Handle with CSRF returned error: %v", err)
 	}
 }
 

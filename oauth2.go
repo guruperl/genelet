@@ -205,7 +205,7 @@ func (self *Oauth2) setStateCookie(value string, maxAge int) {
 		MaxAge:   maxAge,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   self.R.TLS != nil,
+		Secure:   self.secureCookie(),
 	})
 }
 

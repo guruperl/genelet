@@ -99,16 +99,10 @@ func TestAccess(t *testing.T) {
 	if ret != nil {
 		t.Errorf("%s wanted", ret.Error())
 	}
-	if r.Header["X-Forwarded-User"][0] != "x2" {
-		t.Errorf("%s wanted", "x2")
-	}
-	if r.Header["X-Forwarded-User"][1] != "x3" {
+	if r.Header["X-Forwarded-User"][0] != "x3" {
 		t.Errorf("%s wanted", "x3")
 	}
-	if r.Header["X-Forwarded-Group"][0] != "g1|g2|g3" {
-		t.Errorf("%s wanted", "g1|g2|g3")
-	}
-	if r.Header["X-Forwarded-Group"][1] != "g2|g3|g4" {
+	if r.Header["X-Forwarded-Group"][0] != "g2|g3|g4" {
 		t.Errorf("%s wanted", "g2|g3|g4")
 	}
 

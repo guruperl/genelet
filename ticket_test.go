@@ -78,8 +78,8 @@ func TestTicket(t *testing.T) {
 
 	// test authentication
 	b := newBase(configure, "m", "json", w, req)
-	tticket := NewTTicket(*b, "http://xxx.yyy.zzz/foo/bar", "db")
-	tticket.Uri = "asw"
+	tticket := NewTTicket(*b, "/bb/m/e/foo/bar", "db")
+	tticket.Uri = "/bb/m/e/asw"
 	ret := tticket.Authenticate("", "w")
 	if ret.(Gerror).Code != 1037 {
 		t.Errorf("%s returned", ret.Error())
@@ -112,7 +112,7 @@ func TestTicket(t *testing.T) {
 	// test Handler_login which also test authentication and login page
 	w = httptest.NewRecorder()
 	b = newBase(configure, "m", "e", w, req)
-	tticket = NewTTicket(*b, "http://xxx.yyy.zzz/foo/bar", "db")
+	tticket = NewTTicket(*b, "/bb/m/e/foo/bar", "db")
 	_ = req.ParseForm()
 	ret = tticket.Handler_login()
 	if ret.(Gerror).Code != 303 {
@@ -140,7 +140,7 @@ func TestTicket(t *testing.T) {
 	req, _ = http.NewRequest("GET", "http://example.com/foo?email=hello&passwd=world&direct=1", nil)
 	w = httptest.NewRecorder()
 	b = newBase(configure, "m", "e", w, req)
-	tticket = NewTTicket(*b, "http://xxx.yyy.zzz/foo/bar", "db")
+	tticket = NewTTicket(*b, "/bb/m/e/foo/bar", "db")
 	_ = req.ParseForm()
 	ret = tticket.Handler_login()
 	if ret.(Gerror).Code != 303 {
@@ -155,7 +155,7 @@ func TestTicket(t *testing.T) {
 	req, _ = http.NewRequest("GET", "http://example.com/foo?email=hello&passwd=world&go_err=1020", nil)
 	w = httptest.NewRecorder()
 	b = newBase(configure, "m", "e", w, req)
-	tticket = NewTTicket(*b, "http://xxx.yyy.zzz/foo/bar", "db")
+	tticket = NewTTicket(*b, "/bb/m/e/foo/bar", "db")
 	_ = req.ParseForm()
 	ret = tticket.Handler()
 	if ret.(Gerror).Code != 1036 {
@@ -163,12 +163,12 @@ func TestTicket(t *testing.T) {
 	}
 
 	// test Handler with error code and cookie, the most common case for redirect
-	req, _ = http.NewRequest("GET", "http://example.com/foo?go_uri=xxxx&go_err=1020", nil)
+	req, _ = http.NewRequest("GET", "http://example.com/foo?go_uri=/bb/m/e/foo/bar&go_err=1020", nil)
 	w = httptest.NewRecorder()
 	b = newBase(configure, "m", "e", w, req)
-	tticket = NewTTicket(*b, "http://xxx.yyy.zzz/foo/bar", "db")
+	tticket = NewTTicket(*b, "/bb/m/e/foo/bar", "db")
 	_ = req.ParseForm()
-	cookie := &http.Cookie{Name: "go_probe", Value: "http://xxx.yyy.zzz/foo/bar", Path: "/", Domain: "genelet.com"}
+	cookie := &http.Cookie{Name: "go_probe", Value: "/bb/m/e/foo/bar", Path: "/", Domain: "genelet.com"}
 	req.AddCookie(cookie)
 	ret = tticket.Handler()
 	if ret.(Gerror).Code != 1020 {
@@ -179,9 +179,9 @@ func TestTicket(t *testing.T) {
 	req, _ = http.NewRequest("GET", "http://example.com/foo?email=hello&passwd=world", nil)
 	w = httptest.NewRecorder()
 	b = newBase(configure, "m", "e", w, req)
-	tticket = NewTTicket(*b, "http://xxx.yyy.zzz/foo/bar", "db")
+	tticket = NewTTicket(*b, "/bb/m/e/foo/bar", "db")
 	_ = req.ParseForm()
-	cookie = &http.Cookie{Name: "go_probe", Value: "http://xxx.yyy.zzz/foo/bar", Path: "/", Domain: "genelet.com"}
+	cookie = &http.Cookie{Name: "go_probe", Value: "/bb/m/e/foo/bar", Path: "/", Domain: "genelet.com"}
 	req.AddCookie(cookie)
 	ret = tticket.Handler()
 	if ret.(Gerror).Code != 303 {
@@ -191,7 +191,7 @@ func TestTicket(t *testing.T) {
 	if !strings.HasPrefix(h.Get("Set-Cookie"), "mc=") {
 		t.Errorf("%s wanted", h.Get("Set-Cookie"))
 	}
-	if ret.(Gerror).Errstr != "http://xxx.yyy.zzz/foo/bar" {
+	if ret.(Gerror).Errstr != "/bb/m/e/foo/bar" {
 		t.Errorf("%s wanted", ret.(Gerror).Errstr)
 	}
 }

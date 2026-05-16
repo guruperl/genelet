@@ -48,4 +48,13 @@ func TestGeneletUtils(t *testing.T) {
 	if id != 3517789607 {
 		t.Errorf("%s %d matched", ip, id)
 	}
+	if got := Ip2int("not an ip"); got != 0 {
+		t.Errorf("invalid IP = %d, want 0", got)
+	}
+	if got := Interface2String(true); got != "true" {
+		t.Errorf("bool string = %q, want true", got)
+	}
+	if got := Interface2String(map[string]interface{}{"ok": true}); got != `{"ok":true}` {
+		t.Errorf("map string = %q", got)
+	}
 }

@@ -16,6 +16,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -157,14 +158,23 @@ func embeddedAssignable(value reflect.Value, want reflect.Type) (reflect.Value, 
 
 func Interface2String(v interface{}) string {
 	switch u := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return u
 	case []uint8:
 		return string(u)
 	case int, int32, int64, uint, uint32, uint64:
 		return fmt.Sprintf("%d", u)
 	case float32, float64:
 		return fmt.Sprintf("%f", u)
+	case bool:
+		return strconv.FormatBool(u)
 	default:
-		return u.(string)
+		if b, err := json.Marshal(u); err == nil {
+			return string(b)
+		}
+		return fmt.Sprint(u)
 	}
 }
 
@@ -211,8 +221,14 @@ func Unix_timestamp() int {
 
 func Ip2int(ip string) uint32 {
 	netip := net.ParseIP(ip)
+	if netip == nil {
+		return 0
+	}
 	to4 := netip.To4()
 	if to4 == nil {
+		if len(netip) < 16 {
+			return 0
+		}
 		return binary.BigEndian.Uint32(netip[12:16])
 	}
 	return binary.BigEndian.Uint32(to4)
